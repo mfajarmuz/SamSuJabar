@@ -30,7 +30,7 @@ router.get('/:id', async (req, res) => {
 
   const [laporanRes, transaksiRes, rekapRes, stsRes, kabkotaRes] = await Promise.all([
     supabase.from('laporan_harian').select('*, outlets(nama, kode)').eq('id', id).single(),
-    supabase.from('transaksi_sam').select('jenis_kendaraan').eq('laporan_id', id),
+    supabase.from('transaksi_sam').select('jenis_kendaraan, is_kabupaten').eq('laporan_id', id),
     supabase.from('rekap_kasir').select('total_pkb, total_swdkllj, total_adm, grand_total').eq('laporan_id', id),
     supabase.from('sts_setoran').select('instansi, pkb, bbnkb, total, kode, nama').eq('laporan_id', id),
     supabase.from('sts_kabkota_detail').select('kode, nama, pkb_pokok, pkb_denda, opsen_pkb_denda, opsen_pkb, jumlah').eq('laporan_id', id),
@@ -39,8 +39,12 @@ router.get('/:id', async (req, res) => {
   if (laporanRes.error) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
 
   const jenisSummary = {};
+  const potensiSummary = {};
   (transaksiRes.data || []).forEach(t => {
     jenisSummary[t.jenis_kendaraan] = (jenisSummary[t.jenis_kendaraan] || 0) + 1;
+    if (t.is_kabupaten !== false) { // Default to true if null or undefined for backwards compatibility
+      potensiSummary[t.jenis_kendaraan] = (potensiSummary[t.jenis_kendaraan] || 0) + 1;
+    }
   });
 
   const rekap = rekapRes.data?.[0] || null;
@@ -58,6 +62,7 @@ router.get('/:id', async (req, res) => {
   res.json({
     ...laporanRes.data,
     jenis_summary: jenisSummary,
+    potensi_summary: potensiSummary,
     rekap,
     sts,
     potensi,

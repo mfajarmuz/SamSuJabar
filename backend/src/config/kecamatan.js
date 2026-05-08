@@ -58,6 +58,10 @@ function isKabupatenTasikmalaya(addressText) {
   const CITY_EXCLUSIONS = ['INDIHIANG', 'CIHIDEUNG', 'CIPEDES', 'TAWANG', 'PURBARATU', 'MANGKUBUMI', 'TAMANSARI', 'KAWALU', 'CIBEUREUM', 'BUNGURSARI'];
   for (const excl of CITY_EXCLUSIONS) {
     if (upper.includes(excl)) {
+      // Ensure TAWANG exclusion doesn't trigger on CINTAWANGI village in Karangnunggal
+      if (excl === 'TAWANG' && upper.includes('CINTAWANGI')) {
+        continue;
+      }
       return false; // Belongs to Kota, not Kabupaten
     }
   }

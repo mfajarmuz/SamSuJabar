@@ -43,6 +43,15 @@ export default function RiwayatDetailScreen({ route, navigation }) {
   const r2 = jenis['R01'] || 0;
   const totalWp = Object.values(jenis).reduce((s, n) => s + n, 0);
   const r4 = totalWp - r2;
+
+  const potensiSummary = laporan.potensi_summary || jenis;
+  const potensiR2 = potensiSummary['R01'] || 0;
+  const potensiTotalWp = Object.values(potensiSummary).reduce((s, n) => s + n, 0);
+  const potensiR4 = potensiTotalWp - potensiR2;
+
+  const luarTotalWp = totalWp - potensiTotalWp;
+  const luarR2 = r2 - potensiR2;
+  const luarR4 = r4 - potensiR4;
   const sts = laporan.sts || {};
   const rekap = laporan.rekap || {
     total_pkb: sts.provinsi || 0,
@@ -125,21 +134,46 @@ export default function RiwayatDetailScreen({ route, navigation }) {
       {/* Jumlah WP */}
       {totalWp > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Jumlah WP</Text>
+          <Text style={styles.cardTitle}>Jumlah WP (Potensi Sukaraja)</Text>
           <View style={styles.wpRow}>
             <View style={styles.wpBox}>
-              <Text style={styles.wpNum}>{r2}</Text>
+              <Text style={styles.wpNum}>{potensiR2}</Text>
               <Text style={styles.wpLabel}>R.2</Text>
             </View>
             <View style={styles.wpBox}>
-              <Text style={styles.wpNum}>{r4}</Text>
+              <Text style={styles.wpNum}>{potensiR4}</Text>
               <Text style={styles.wpLabel}>R.4 & Lainnya</Text>
             </View>
           </View>
-          <View style={[styles.wpBox, styles.wpTotal]}>
-            <Text style={[styles.wpNum, { color: '#1565C0' }]}>{totalWp}</Text>
-            <Text style={styles.wpLabel}>Total WP</Text>
+          <View style={[styles.wpBox, styles.wpTotal, { backgroundColor: '#E8F5E9', marginBottom: luarTotalWp > 0 ? 12 : 0 }]}>
+            <Text style={[styles.wpNum, { color: '#2E7D32' }]}>{potensiTotalWp}</Text>
+            <Text style={styles.wpLabel}>Total Potensi Sukaraja</Text>
           </View>
+
+          {luarTotalWp > 0 && (
+            <>
+              <Text style={[styles.cardTitle, { marginTop: 16, marginBottom: 8 }]}>Luar Potensi (Titipan)</Text>
+              <View style={styles.wpRow}>
+                <View style={[styles.wpBox, { backgroundColor: '#FFF3E0' }]}>
+                  <Text style={styles.wpNum}>{luarR2}</Text>
+                  <Text style={styles.wpLabel}>R.2 Luar</Text>
+                </View>
+                <View style={[styles.wpBox, { backgroundColor: '#FFF3E0' }]}>
+                  <Text style={styles.wpNum}>{luarR4}</Text>
+                  <Text style={styles.wpLabel}>R.4 Luar</Text>
+                </View>
+              </View>
+              <View style={[styles.wpBox, styles.wpTotal, { backgroundColor: '#FFE0B2', marginBottom: 12 }]}>
+                <Text style={[styles.wpNum, { color: '#E65100' }]}>{luarTotalWp}</Text>
+                <Text style={styles.wpLabel}>Total Luar Potensi</Text>
+              </View>
+
+              <View style={[styles.wpBox, styles.wpTotal, { backgroundColor: '#BBDEFB' }]}>
+                <Text style={[styles.wpNum, { color: '#1565C0' }]}>{totalWp}</Text>
+                <Text style={styles.wpLabel}>Grand Total WP (SAM III-2)</Text>
+              </View>
+            </>
+          )}
         </View>
       )}
 

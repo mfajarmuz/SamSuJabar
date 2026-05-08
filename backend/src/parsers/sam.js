@@ -1,5 +1,7 @@
 'use strict';
 
+const { isKabupatenTasikmalaya } = require('../config/kecamatan');
+
 /**
  * Parser for SAM III-2 PDF text output (pdf-parse one-token-per-line format).
  *
@@ -196,11 +198,18 @@ function parseSam(text) {
         }
       }
 
+      // Get address lines
+      const addressLines = block.slice(jenisIdx + 2, zerosStart);
+      const alamat = addressLines.join(' ');
+      const is_kabupaten = isKabupatenTasikmalaya(alamat);
+
       // adm = total minus PKB jumlah and OPSEN PKB jumlah (BEA STNK/TNKB)
       adm = total - pkb_jumlah - opsen_pkb_jumlah;
-    }
 
-    transaksi.push({ no_skkp, jenis_kendaraan, no_polisi, pkb, swdkllj, adm, total });
+      transaksi.push({ no_skkp, jenis_kendaraan, no_polisi, pkb, swdkllj, adm, total, alamat, is_kabupaten });
+    } else {
+      transaksi.push({ no_skkp, jenis_kendaraan, no_polisi, pkb, swdkllj, adm, total, alamat: '', is_kabupaten: true });
+    }
   }
 
   return { transaksi };
