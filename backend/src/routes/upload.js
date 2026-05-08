@@ -1,0 +1,203 @@
+const express = require('express');
+const pdfParse = require('pdf-parse');
+const router = express.Router();
+const upload = require('../middleware/upload');
+const { parseFilename } = require('../parsers/filename');
+const { parseSam } = require('../parsers/sam');
+const { parseRekapKasir } = require('../parsers/rekapKasir');
+const { parseSts } = require('../parsers/sts');
+const supabase = require('../config/supabase');
+
+router.post('/', upload.array('files', 3), async (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada file yang diupload' });
+  }
+
+  const results = [];
+  const errors = [];
+
+  for (const file of req.files) {
+    const meta = parseFilename(file.originalname);
+    if (!meta) {
+      errors.push({ file: file.originalname, error: 'Format nama file tidak valid' });
+      continue;
+    }
+
+    try {
+      const { text } = await pdfParse(file.buffer);
+
+      const { data: outlet, error: outletErr } = await supabase
+        .from('outlets')
+        .select('id, kode, nama')
+        .eq('kode', meta.kode)
+        .single();
+
+      if (outletErr || !outlet) {
+        errors.push({ file: file.originalname, error: `Outlet ${meta.kode} tidak ditemukan` });
+        continue;
+      }
+
+      const laporanData = {
+        outlet_id: outlet.id,
+        tanggal: meta.tanggal,
+        [`${meta.type}_file`]: file.originalname,
+      };
+
+      const { data: laporan, error: lapErr } = await supabase
+        .from('laporan_harian')
+        .upsert(laporanData, { onConflict: 'outlet_id,tanggal' })
+        .select('id')
+        .single();
+
+      if (lapErr) {
+        errors.push({ file: file.originalname, error: lapErr.message });
+        continue;
+      }
+
+      const laporan_id = laporan.id;
+
+      if (meta.type === 'sam') {
+        const { transaksi } = parseSam(text);
+        const { error: delErr } = await supabase.from('transaksi_sam').delete().eq('laporan_id', laporan_id);
+        if (delErr) {
+          errors.push({ file: file.originalname, error: delErr.message });
+          continue;
+        }
+        const rows = transaksi.map(t => ({ laporan_id, ...t }));
+        const { error: insertSamErr } = await supabase.from('transaksi_sam').insert(rows);
+        if (insertSamErr) {
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertSamErr.message);
+          throw insertSamErr;
+        }
+        const jenis = {};
+        transaksi.forEach(t => {
+          jenis[t.jenis_kendaraan] = (jenis[t.jenis_kendaraan] || 0) + 1;
+        });
+        results.push({
+          file: file.originalname,
+          type: 'sam',
+          count: transaksi.length,
+          jenis,
+          laporan_id,
+          kode: outlet.kode,
+          nama_outlet: outlet.nama,
+          tanggal: meta.tanggal,
+        });
+
+      } else if (meta.type === 'rekap') {
+        const { kasir } = parseRekapKasir(text);
+        const { error: delErr } = await supabase.from('rekap_kasir').delete().eq('laporan_id', laporan_id);
+        if (delErr) {
+          errors.push({ file: file.originalname, error: delErr.message });
+          continue;
+        }
+        const { error: insertRekapErr } = await supabase.from('rekap_kasir').insert(kasir.map(k => ({ laporan_id, ...k })));
+        if (insertRekapErr) {
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertRekapErr.message);
+          throw insertRekapErr;
+        }
+        const kasirSummary = kasir[0] || {};
+        results.push({
+          file: file.originalname,
+          type: 'rekap',
+          count: kasir.length,
+          total_pkb: kasirSummary.total_pkb || 0,
+          total_swdkllj: kasirSummary.total_swdkllj || 0,
+          total_adm: kasirSummary.total_adm || 0,
+          grand_total: kasirSummary.grand_total || 0,
+          laporan_id,
+          kode: outlet.kode,
+          nama_outlet: outlet.nama,
+          tanggal: meta.tanggal,
+        });
+
+      } else if (meta.type === 'sts') {
+        const { setoran, potensi, instansi_rows } = parseSts(text);
+
+        const [{ error: delStsErr }, { error: delKabErr }] = await Promise.all([
+          supabase.from('sts_setoran').delete().eq('laporan_id', laporan_id),
+          supabase.from('sts_kabkota_detail').delete().eq('laporan_id', laporan_id),
+        ]);
+        if (delStsErr || delKabErr) {
+          errors.push({ file: file.originalname, error: (delStsErr || delKabErr).message });
+          continue;
+        }
+
+        const allSetoran = setoran.map(s => ({ laporan_id, ...s }));
+        if (potensi) {
+          allSetoran.push({
+            laporan_id,
+            instansi: 'potensi',
+            kode: potensi.kode,
+            nama: potensi.nama,
+            pkb: potensi.pkb_pokok,
+            bbnkb: potensi.opsen_pkb,
+            swdkllj: 0,
+            adm: 0,
+            total: potensi.jumlah,
+          });
+        }
+
+        const { error: insertStsErr } = await supabase.from('sts_setoran').insert(allSetoran);
+        if (insertStsErr) {
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertStsErr.message);
+          throw insertStsErr;
+        }
+
+        if (instansi_rows.length > 0) {
+          const { error: insertKabErr } = await supabase.from('sts_kabkota_detail').insert(
+            instansi_rows.map(r => ({
+              laporan_id,
+              kode: r.kode,
+              nama: r.nama,
+              pkb_pokok: r.pkb_pokok,
+              pkb_denda: r.pkb_denda,
+              opsen_pkb_denda: r.opsen_pkb_denda,
+              opsen_pkb: r.opsen_pkb,
+              jumlah: r.jumlah,
+            }))
+          );
+          if (insertKabErr) {
+            console.error(`[upload] laporan ${laporan_id}: kabkota_detail insert failed`, insertKabErr.message);
+            throw insertKabErr;
+          }
+        }
+
+        const grand_total = setoran.reduce((s, r) => s + r.total, 0);
+        results.push({
+          file: file.originalname,
+          type: 'sts',
+          grand_total,
+          count: setoran.length,
+          laporan_id,
+          kode: outlet.kode,
+          nama_outlet: outlet.nama,
+          tanggal: meta.tanggal,
+        });
+      }
+
+      const { data: lapCheck } = await supabase
+        .from('laporan_harian')
+        .select('sam_file, rekap_file, sts_file')
+        .eq('id', laporan_id)
+        .single();
+
+      const isComplete = lapCheck && lapCheck.sam_file && lapCheck.sts_file;
+      const { error: statusErr } = await supabase
+        .from('laporan_harian')
+        .update({ status: isComplete ? 'complete' : 'partial' })
+        .eq('id', laporan_id);
+      if (statusErr) {
+        errors.push({ file: file.originalname, error: statusErr.message });
+      }
+
+    } catch (err) {
+      errors.push({ file: file.originalname, error: err.message });
+    }
+  }
+
+  const statusCode = results.length > 0 ? 200 : 400;
+  res.status(statusCode).json({ results, errors });
+});
+
+module.exports = router;
