@@ -60,6 +60,8 @@ function blokInstansi(nama, pkb_pokok, opsen_pkb, pkb_denda, opsen_pkb_denda) {
   ];
   if (totalDenda > 0) {
     lines.push(`Denda  Rp ${formatRupiah(totalDenda)},-`);
+  } else {
+    lines.push(`Denda  Rp -,-`);
   }
   lines.push(`         ============`);
   lines.push(`Jml    Rp ${formatRupiah(jumlah)},-`);
@@ -97,6 +99,8 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
     ];
     if (totalDenda > 0) {
       lines.push(`Denda   Rp ${formatRupiah(totalDenda)},-`);
+    } else {
+      lines.push(`Denda   Rp -,-`);
     }
     const totalPotensi = (potensi.pkb_pokok || 0) + (potensi.opsen_pkb || 0) + totalDenda;
     lines.push('         =============');
