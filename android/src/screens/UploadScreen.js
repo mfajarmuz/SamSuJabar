@@ -30,6 +30,7 @@ function buildFileEntry(asset) {
     valid: true,
     error: null,
     typeMeta: TYPE_META[parsed.type] || { label: 'PDF', color: '#616E7C', bg: '#ECEFF1' },
+    meta: parsed,
   };
 }
 
@@ -67,6 +68,44 @@ export default function UploadScreen({ navigation }) {
 
   async function submit() {
     if (validFiles.length === 0) return;
+
+    // Client-side validation: pastikan semua file berasal dari outlet dan tanggal yang sama
+    let commonKode = null;
+    let commonTanggal = null;
+    let firstFileName = '';
+
+    for (const file of validFiles) {
+      const meta = file.meta;
+      if (meta) {
+        if (commonKode === null) {
+          commonKode = meta.kode;
+          commonTanggal = meta.tanggal;
+          firstFileName = file.name;
+        } else {
+          if (meta.kode !== commonKode) {
+            Alert.alert(
+              'Gagal',
+              `File PDF berasal dari outlet yang berbeda!\n\n` +
+              `• '${firstFileName}' -> Kode: ${commonKode}\n` +
+              `• '${file.name}' -> Kode: ${meta.kode}\n\n` +
+              `Pastikan semua file yang dipilih berasal dari outlet yang sama.`
+            );
+            return;
+          }
+          if (meta.tanggal !== commonTanggal) {
+            Alert.alert(
+              'Gagal',
+              `File PDF memiliki tanggal laporan yang berbeda!\n\n` +
+              `• '${firstFileName}' -> Tanggal: ${commonTanggal}\n` +
+              `• '${file.name}' -> Tanggal: ${meta.tanggal}\n\n` +
+              `Pastikan semua file yang dipilih memiliki tanggal yang sama.`
+            );
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
     try {
       const data = await uploadFiles(validFiles);
@@ -77,7 +116,8 @@ export default function UploadScreen({ navigation }) {
       const laporan_id = data.results?.[0]?.laporan_id;
       navigation.navigate('Ringkasan', { laporan_id, errors: data.errors });
     } catch (err) {
-      Alert.alert('Error', err.message || 'Gagal menghubungi server');
+      const errMsg = err.response?.data?.error || err.message || 'Gagal menghubungi server';
+      Alert.alert('Error', errMsg);
     } finally {
       setLoading(false);
     }

@@ -53,7 +53,15 @@ router.get('/:id', async (req, res) => {
   let potensi = null;
   (stsRes.data || []).forEach(s => {
     if (s.instansi === 'potensi') {
-      potensi = { kode: s.kode, nama: s.nama, pkb_pokok: s.pkb, opsen_pkb: s.bbnkb, jumlah: s.total };
+      potensi = {
+        kode: s.kode,
+        nama: s.nama,
+        pkb_pokok: s.pkb,
+        opsen_pkb: s.bbnkb,
+        pkb_denda: s.swdkllj || 0,
+        opsen_pkb_denda: s.adm || 0,
+        jumlah: s.total,
+      };
     } else {
       sts[s.instansi] = s.total;
     }

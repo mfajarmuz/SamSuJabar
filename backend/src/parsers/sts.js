@@ -134,6 +134,8 @@ function parseSts(text) {
       kode: ownRow.kode,
       nama: ownRow.nama,
       pkb_pokok: ownRow.pkb_pokok,
+      pkb_denda: ownRow.pkb_denda || 0,
+      opsen_pkb_denda: ownRow.opsen_pkb_denda || 0,
       opsen_pkb: pppdMatch ? pppdMatch.opsen_pkb : 0,
       jumlah: ownRow.jumlah,
     };

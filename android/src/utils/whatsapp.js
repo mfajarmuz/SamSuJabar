@@ -89,7 +89,19 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
     blocks.push(`Potensi ${potensiNama}`);
     blocks.push('');
     blocks.push(blokWP(r2, r4, totalWp));
-    blocks.push(blokPKB('', potensi.pkb_pokok || 0, potensi.opsen_pkb || 0));
+    
+    const totalDenda = (potensi.pkb_denda || 0) + (potensi.opsen_pkb_denda || 0);
+    const lines = [
+      `Prov    Rp ${formatRupiah(potensi.pkb_pokok || 0)},-`,
+      `Opsen   Rp ${formatRupiah(potensi.opsen_pkb || 0)},-`,
+    ];
+    if (totalDenda > 0) {
+      lines.push(`Denda   Rp ${formatRupiah(totalDenda)},-`);
+    }
+    const totalPotensi = (potensi.pkb_pokok || 0) + (potensi.opsen_pkb || 0) + totalDenda;
+    lines.push('         =============');
+    lines.push(`Jumlah  Rp ${formatRupiah(totalPotensi)},-`);
+    blocks.push(lines.join('\n'));
   }
 
   const onlineList = (kabkota || []).filter(k => k.kode !== potensi?.kode);

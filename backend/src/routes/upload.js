@@ -13,15 +13,46 @@ router.post('/', upload.array('files', 3), async (req, res) => {
     return res.status(400).json({ error: 'Tidak ada file yang diupload' });
   }
 
+  // Upfront validation: pastikan semua file berasal dari outlet dan tanggal yang sama
+  let commonKode = null;
+  let commonTanggal = null;
+  let firstFileName = '';
+
+  for (const file of req.files) {
+    const meta = parseFilename(file.originalname);
+    if (!meta) {
+      return res.status(400).json({ error: `Format nama file tidak valid: ${file.originalname}` });
+    }
+
+    if (commonKode === null) {
+      commonKode = meta.kode;
+      commonTanggal = meta.tanggal;
+      firstFileName = file.originalname;
+    } else {
+      if (meta.kode !== commonKode) {
+        return res.status(400).json({
+          error: `Gagal: File PDF berasal dari outlet yang berbeda!\n\n` +
+                 `• File '${firstFileName}' -> Kode: ${commonKode}\n` +
+                 `• File '${file.originalname}' -> Kode: ${meta.kode}\n\n` +
+                 `Pastikan semua file yang dipilih berasal dari outlet yang sama.`
+        });
+      }
+      if (meta.tanggal !== commonTanggal) {
+        return res.status(400).json({
+          error: `Gagal: File PDF memiliki tanggal laporan yang berbeda!\n\n` +
+                 `• File '${firstFileName}' -> Tanggal: ${commonTanggal}\n` +
+                 `• File '${file.originalname}' -> Tanggal: ${meta.tanggal}\n\n` +
+                 `Pastikan semua file yang dipilih memiliki tanggal yang sama.`
+        });
+      }
+    }
+  }
+
   const results = [];
   const errors = [];
 
   for (const file of req.files) {
     const meta = parseFilename(file.originalname);
-    if (!meta) {
-      errors.push({ file: file.originalname, error: 'Format nama file tidak valid' });
-      continue;
-    }
 
     try {
       const { text } = await pdfParse(file.buffer);
@@ -132,8 +163,8 @@ router.post('/', upload.array('files', 3), async (req, res) => {
             nama: potensi.nama,
             pkb: potensi.pkb_pokok,
             bbnkb: potensi.opsen_pkb,
-            swdkllj: 0,
-            adm: 0,
+            swdkllj: potensi.pkb_denda || 0,
+            adm: potensi.opsen_pkb_denda || 0,
             total: potensi.jumlah,
           });
         }
