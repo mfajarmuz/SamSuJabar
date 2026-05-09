@@ -7,7 +7,7 @@ import { getLaporan } from '../api';
 import { formatRupiah } from '../utils/format';
 
 export default function RingkasanScreen({ route, navigation }) {
-  const { laporan_id, errors = [] } = route.params;
+  const { laporan_id, errors = [], manualData = {} } = route.params;
   const [laporan, setLaporan] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +51,7 @@ export default function RingkasanScreen({ route, navigation }) {
       sts,
       potensi: laporan.potensi || null,
       kabkota: laporan.kabkota || [],
+      manualData,
     });
   }
 

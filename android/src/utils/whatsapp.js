@@ -68,7 +68,7 @@ function blokInstansi(nama, pkb_pokok, opsen_pkb, pkb_denda, opsen_pkb_denda) {
   return lines.join('\n');
 }
 
-export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap, sts, potensi, kabkota }) {
+export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap, sts, potensi, kabkota, manualData }) {
   const r2 = jenis_summary?.['R01'] || 0;
   const totalWp = Object.values(jenis_summary || {}).reduce((s, n) => s + n, 0);
   const r4 = totalWp - r2;
@@ -90,7 +90,12 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
     blocks.push('');
     blocks.push(`Potensi ${potensiNama}`);
     blocks.push('');
-    blocks.push(blokWP(r2, r4, totalWp));
+    
+    // Gunakan input manual jika diisi, jika tidak default ke 0
+    const pR2 = manualData?.potensiR2 !== undefined && manualData?.potensiR2 !== '' ? Number(manualData.potensiR2) : 0;
+    const pR4 = manualData?.potensiR4 !== undefined && manualData?.potensiR4 !== '' ? Number(manualData.potensiR4) : 0;
+    const pTotal = pR2 + pR4;
+    blocks.push(blokWP(pR2, pR4, pTotal));
     
     const totalDenda = (potensi.pkb_denda || 0) + (potensi.opsen_pkb_denda || 0);
     const lines = [
@@ -106,6 +111,16 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
     lines.push('         =============');
     lines.push(`Jumlah  Rp ${formatRupiah(totalPotensi)},-`);
     blocks.push(lines.join('\n'));
+  }
+
+  // Blok E-Samsat jika ada input manual
+  const esJumlah = manualData?.esamsatJumlah !== undefined && manualData?.esamsatJumlah !== '' ? Number(manualData.esamsatJumlah) : null;
+  const esPotensi = manualData?.esamsatPotensi !== undefined && manualData?.esamsatPotensi !== '' ? Number(manualData.esamsatPotensi) : null;
+  if (esJumlah !== null || esPotensi !== null) {
+    blocks.push('');
+    blocks.push('E-Samsat :');
+    blocks.push(`Jumlah :  ${esJumlah ?? 0} WP`);
+    blocks.push(`Potensi Sukaraja :  ${esPotensi ?? 0} WP`);
   }
 
   const onlineList = (kabkota || []).filter(k => k.kode !== potensi?.kode);

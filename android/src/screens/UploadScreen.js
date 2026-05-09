@@ -1,8 +1,9 @@
 // src/screens/UploadScreen.js
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, FlatList,
+  View, Text, TouchableOpacity,
   StyleSheet, Alert, ActivityIndicator,
+  TextInput, ScrollView,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadFiles } from '../api';
@@ -37,6 +38,10 @@ function buildFileEntry(asset) {
 export default function UploadScreen({ navigation }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [potensiR2, setPotensiR2] = useState('');
+  const [potensiR4, setPotensiR4] = useState('');
+  const [esamsatJumlah, setEsamsatJumlah] = useState('');
+  const [esamsatPotensi, setEsamsatPotensi] = useState('');
 
   async function pickFiles() {
     try {
@@ -114,7 +119,16 @@ export default function UploadScreen({ navigation }) {
         return;
       }
       const laporan_id = data.results?.[0]?.laporan_id;
-      navigation.navigate('Ringkasan', { laporan_id, errors: data.errors });
+      navigation.navigate('Ringkasan', {
+        laporan_id,
+        errors: data.errors,
+        manualData: {
+          potensiR2: potensiR2 || '0',
+          potensiR4: potensiR4 || '0',
+          esamsatJumlah: esamsatJumlah || '0',
+          esamsatPotensi: esamsatPotensi || '0',
+        }
+      });
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Gagal menghubungi server';
       Alert.alert('Error', errMsg);
@@ -126,7 +140,7 @@ export default function UploadScreen({ navigation }) {
   const submitDisabled = loading || validFiles.length === 0;
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
       {/* Area pilih file */}
       <TouchableOpacity style={styles.pickArea} onPress={pickFiles} disabled={loading}>
         <Text style={styles.pickIcon}>📄</Text>
@@ -145,12 +159,9 @@ export default function UploadScreen({ navigation }) {
 
       {/* Daftar file */}
       {files.length > 0 ? (
-        <FlatList
-          data={files}
-          keyExtractor={item => item.name}
-          style={styles.fileList}
-          renderItem={({ item }) => (
-            <View style={[styles.fileRow, !item.valid && styles.fileRowInvalid]}>
+        <View style={{ marginBottom: 16 }}>
+          {files.map(item => (
+            <View key={item.name} style={[styles.fileRow, !item.valid && styles.fileRowInvalid]}>
               {/* Badge tipe */}
               <View style={[styles.typeBadge, { backgroundColor: item.typeMeta.bg }]}>
                 <Text style={[styles.typeBadgeText, { color: item.typeMeta.color }]}>
@@ -171,11 +182,64 @@ export default function UploadScreen({ navigation }) {
                 <Text style={styles.removeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
-          )}
-        />
+          ))}
+        </View>
       ) : (
         <Text style={styles.emptyText}>Belum ada file dipilih</Text>
       )}
+
+      {/* Form Isian Manual Tambahan */}
+      <View style={styles.formCard}>
+        <Text style={styles.formTitle}>Isian Manual Tambahan</Text>
+        
+        <Text style={styles.formSectionLabel}>Potensi Sukaraja</Text>
+        <View style={styles.inputRow}>
+          <View style={styles.inputCol}>
+            <Text style={styles.inputLabel}>WP R.2</Text>
+            <TextInput
+              style={styles.textInput}
+              keyboardType="numeric"
+              placeholder="0"
+              value={potensiR2}
+              onChangeText={setPotensiR2}
+            />
+          </View>
+          <View style={styles.inputCol}>
+            <Text style={styles.inputLabel}>WP R.4</Text>
+            <TextInput
+              style={styles.textInput}
+              keyboardType="numeric"
+              placeholder="0"
+              value={potensiR4}
+              onChangeText={setPotensiR4}
+            />
+          </View>
+        </View>
+
+        <Text style={[styles.formSectionLabel, { marginTop: 16 }]}>E-Samsat</Text>
+        <View style={styles.inputRow}>
+          <View style={styles.inputCol}>
+            <Text style={styles.inputLabel}>Jumlah WP</Text>
+            <TextInput
+              style={styles.textInput}
+              keyboardType="numeric"
+              placeholder="0"
+              value={esamsatJumlah}
+              onChangeText={setEsamsatJumlah}
+            />
+          </View>
+          <View style={styles.inputCol}>
+            <Text style={styles.inputLabel}>Potensi Sukaraja WP</Text>
+            <TextInput
+              style={styles.textInput}
+              keyboardType="numeric"
+              placeholder="0"
+              value={esamsatPotensi}
+              onChangeText={setEsamsatPotensi}
+            />
+          </View>
+        </View>
+      </View>
 
       {/* Tombol kirim */}
       <TouchableOpacity
@@ -190,7 +254,7 @@ export default function UploadScreen({ navigation }) {
             </Text>
         }
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -244,8 +308,38 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12, shadowRadius: 4, elevation: 2,
+    marginTop: 16,
   },
   submitBtnDisabled: { backgroundColor: '#90CAF9', elevation: 0 },
   submitText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+
+  formCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 16,
+    padding: 16, marginBottom: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+  },
+  formTitle: {
+    fontSize: 14, fontWeight: '700', color: '#1565C0',
+    marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  formSectionLabel: {
+    fontSize: 12, fontWeight: '600', color: '#616E7C',
+    marginBottom: 8,
+  },
+  inputRow: {
+    flexDirection: 'row', gap: 12,
+  },
+  inputCol: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 11, color: '#616E7C', marginBottom: 4,
+  },
+  textInput: {
+    backgroundColor: '#F4F6F9', height: 44, borderRadius: 8,
+    paddingHorizontal: 12, fontSize: 14, color: '#1A1A2E',
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
 });
 
