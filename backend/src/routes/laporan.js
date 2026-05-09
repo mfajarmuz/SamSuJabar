@@ -32,7 +32,7 @@ router.get('/:id', async (req, res) => {
     supabase.from('laporan_harian').select('*, outlets(nama, kode)').eq('id', id).single(),
     supabase.from('transaksi_sam').select('jenis_kendaraan, is_kabupaten').eq('laporan_id', id),
     supabase.from('rekap_kasir').select('total_pkb, total_swdkllj, total_adm, grand_total').eq('laporan_id', id),
-    supabase.from('sts_setoran').select('instansi, pkb, bbnkb, total, kode, nama').eq('laporan_id', id),
+    supabase.from('sts_setoran').select('instansi, pkb, bbnkb, swdkllj, adm, total, kode, nama').eq('laporan_id', id),
     supabase.from('sts_kabkota_detail').select('kode, nama, pkb_pokok, pkb_denda, opsen_pkb_denda, opsen_pkb, jumlah').eq('laporan_id', id),
   ]);
 
