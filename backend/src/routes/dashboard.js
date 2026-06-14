@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
+const { asyncHandler } = require('../utils/asyncHandler');
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   if (req.query.tanggal && !/^\d{4}-\d{2}-\d{2}$/.test(req.query.tanggal)) {
     return res.status(400).json({ error: 'Format tanggal harus YYYY-MM-DD' });
   }
@@ -28,7 +29,10 @@ router.get('/', async (req, res) => {
   const outletMap = {};
   (laporan || []).forEach(l => {
     if (!l.outlets) return;
-    const rekap = l.rekap_kasir?.[0] || {};
+    // FIX Bug #12 (dashboard): Sum across ALL rekap_kasir rows, not just the first
+    const rekapRows = l.rekap_kasir || [];
+    const grandTotal = rekapRows.reduce((sum, r) => sum + (r.grand_total || 0), 0);
+    const totalPkb = rekapRows.reduce((sum, r) => sum + (r.total_pkb || 0), 0);
     outletMap[l.outlets.kode] = {
       outlet_id: l.outlets.id,
       nama: l.outlets.nama,
@@ -38,9 +42,8 @@ router.get('/', async (req, res) => {
       has_sam: !!l.sam_file,
       has_rekap: !!l.rekap_file,
       has_sts: !!l.sts_file,
-      grand_total: rekap.grand_total || 0,
-      total_pkb: rekap.total_pkb || 0,
-      total_wp: rekap.total_wp || 0,
+      grand_total: grandTotal,
+      total_pkb: totalPkb,
     };
   });
 
@@ -55,18 +58,19 @@ router.get('/', async (req, res) => {
     has_sts: false,
     grand_total: 0,
     total_pkb: 0,
-    total_wp: 0,
   });
+
+  // FIX Bug #16: Use actual outlets count instead of magic number fallback
+  const totalOutlets = outlets?.length || 0;
 
   res.json({
     tanggal,
     outlets_lapor: summary.filter(o => o.laporan_id).length,
-    total_outlets: outlets?.length || 8,
+    total_outlets: totalOutlets,
     total_setoran: summary.reduce((s, o) => s + o.grand_total, 0),
     total_pkb: summary.reduce((s, o) => s + o.total_pkb, 0),
-    total_wp: summary.reduce((s, o) => s + (o.total_wp || 0), 0),
     outlets: summary,
   });
-});
+}));
 
 module.exports = router;

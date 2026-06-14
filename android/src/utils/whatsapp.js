@@ -4,7 +4,10 @@ import { formatRupiah } from './format';
 const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
 function formatTanggalWA(isoDate) {
+  // FIX Bug #25: Handle null/undefined isoDate
+  if (!isoDate) return 'Tanggal tidak tersedia';
   const d = new Date(isoDate.slice(0, 10) + 'T00:00:00');
+  if (isNaN(d.getTime())) return 'Tanggal tidak valid';
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yyyy = d.getFullYear();
@@ -68,6 +71,13 @@ function blokInstansi(nama, pkb_pokok, opsen_pkb, pkb_denda, opsen_pkb_denda) {
   return lines.join('\n');
 }
 
+// FIX: Validate numeric input to prevent NaN propagation
+function safeNumber(val) {
+  if (val === undefined || val === null || val === '') return 0;
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
+}
+
 export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap, sts, potensi, kabkota, manualData }) {
   const r2 = jenis_summary?.['R01'] || 0;
   const totalWp = Object.values(jenis_summary || {}).reduce((s, n) => s + n, 0);
@@ -91,9 +101,9 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
     blocks.push(`Potensi ${potensiNama}`);
     blocks.push('');
     
-    // Gunakan input manual jika diisi, jika tidak default ke 0
-    const pR2 = manualData?.potensiR2 !== undefined && manualData?.potensiR2 !== '' ? Number(manualData.potensiR2) : 0;
-    const pR4 = manualData?.potensiR4 !== undefined && manualData?.potensiR4 !== '' ? Number(manualData.potensiR4) : 0;
+    // FIX Bug #26: Use safeNumber to prevent NaN propagation
+    const pR2 = safeNumber(manualData?.potensiR2);
+    const pR4 = safeNumber(manualData?.potensiR4);
     const pTotal = pR2 + pR4;
     blocks.push(blokWP(pR2, pR4, pTotal));
     
@@ -114,8 +124,8 @@ export function formatWhatsAppText({ outlet_nama, tanggal, jenis_summary, rekap,
   }
 
   // Blok E-Samsat jika ada input manual
-  const esJumlah = manualData?.esamsatJumlah !== undefined && manualData?.esamsatJumlah !== '' ? Number(manualData.esamsatJumlah) : null;
-  const esPotensi = manualData?.esamsatPotensi !== undefined && manualData?.esamsatPotensi !== '' ? Number(manualData.esamsatPotensi) : null;
+  const esJumlah = safeNumber(manualData?.esamsatJumlah) || null;
+  const esPotensi = safeNumber(manualData?.esamsatPotensi) || null;
   if (esJumlah !== null || esPotensi !== null) {
     blocks.push('');
     blocks.push('E-Samsat :');

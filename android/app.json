@@ -2,15 +2,26 @@
   "expo": {
     "name": "SamSuJabar",
     "slug": "samsat-android",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2196F3"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.samsat.kiss"
-    }
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

@@ -11,3 +11,9 @@ CREATE TABLE IF NOT EXISTS sts_kabkota_detail (
     opsen_pkb  BIGINT DEFAULT 0,
     jumlah     BIGINT DEFAULT 0
 );
+
+-- Add indexes for frequently queried foreign keys
+CREATE INDEX IF NOT EXISTS idx_transaksi_sam_laporan_id ON transaksi_sam(laporan_id);
+CREATE INDEX IF NOT EXISTS idx_rekap_kasir_laporan_id ON rekap_kasir(laporan_id);
+CREATE INDEX IF NOT EXISTS idx_sts_setoran_laporan_id ON sts_setoran(laporan_id);
+CREATE INDEX IF NOT EXISTS idx_sts_kabkota_detail_laporan_id ON sts_kabkota_detail(laporan_id);

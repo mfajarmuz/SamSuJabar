@@ -7,6 +7,12 @@ function detectType(name) {
 
 function parseDate(ddmmyyyy) {
   const [dd, mm, yyyy] = ddmmyyyy.split('-');
+  // FIX Bug #12: Validate date components
+  const day = parseInt(dd, 10);
+  const month = parseInt(mm, 10);
+  const year = parseInt(yyyy, 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 2000 || year > 2100) return null;
   return `${yyyy}-${mm}-${dd}`;
 }
 

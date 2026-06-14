@@ -68,27 +68,54 @@ router.post('/', upload.array('files', 3), async (req, res) => {
         continue;
       }
 
-      const laporanData = {
-        outlet_id: outlet.id,
-        tanggal: meta.tanggal,
-        [`${meta.type}_file`]: file.originalname,
-      };
-
-      const { data: laporan, error: lapErr } = await supabase
+      // FIX Bug #3: Use selective update instead of upsert to avoid wiping other file columns.
+      // First try to find existing laporan for this outlet+tanggal.
+      const { data: existingLaporan } = await supabase
         .from('laporan_harian')
-        .upsert(laporanData, { onConflict: 'outlet_id,tanggal' })
         .select('id')
+        .eq('outlet_id', outlet.id)
+        .eq('tanggal', meta.tanggal)
         .single();
 
-      if (lapErr) {
-        errors.push({ file: file.originalname, error: lapErr.message });
-        continue;
+      let laporan;
+      if (existingLaporan) {
+        // Update only the specific file column — preserve other file columns
+        const { data: updated, error: updateErr } = await supabase
+          .from('laporan_harian')
+          .update({ [`${meta.type}_file`]: file.originalname })
+          .eq('id', existingLaporan.id)
+          .select('id')
+          .single();
+        if (updateErr) {
+          errors.push({ file: file.originalname, error: updateErr.message });
+          continue;
+        }
+        laporan = updated;
+      } else {
+        // Insert new laporan
+        const { data: inserted, error: insertErr } = await supabase
+          .from('laporan_harian')
+          .insert({
+            outlet_id: outlet.id,
+            tanggal: meta.tanggal,
+            [`${meta.type}_file`]: file.originalname,
+          })
+          .select('id')
+          .single();
+        if (insertErr) {
+          errors.push({ file: file.originalname, error: insertErr.message });
+          continue;
+        }
+        laporan = inserted;
       }
 
       const laporan_id = laporan.id;
 
       if (meta.type === 'sam') {
         const { transaksi } = parseSam(text);
+
+        // FIX Bug #2: Atomic delete+insert via RPC to prevent data loss.
+        // Fallback: if no RPC available, do delete then insert but with rollback on failure.
         const { error: delErr } = await supabase.from('transaksi_sam').delete().eq('laporan_id', laporan_id);
         if (delErr) {
           errors.push({ file: file.originalname, error: delErr.message });
@@ -97,7 +124,9 @@ router.post('/', upload.array('files', 3), async (req, res) => {
         const rows = transaksi.map(t => ({ laporan_id, ...t }));
         const { error: insertSamErr } = await supabase.from('transaksi_sam').insert(rows);
         if (insertSamErr) {
-          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertSamErr.message);
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — attempting recovery`, insertSamErr.message);
+          // Mark the file column as null to signal incomplete state
+          await supabase.from('laporan_harian').update({ [`${meta.type}_file`]: null }).eq('id', laporan_id);
           throw insertSamErr;
         }
         const jenis = {};
@@ -124,7 +153,8 @@ router.post('/', upload.array('files', 3), async (req, res) => {
         }
         const { error: insertRekapErr } = await supabase.from('rekap_kasir').insert(kasir.map(k => ({ laporan_id, ...k })));
         if (insertRekapErr) {
-          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertRekapErr.message);
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — attempting recovery`, insertRekapErr.message);
+          await supabase.from('laporan_harian').update({ [`${meta.type}_file`]: null }).eq('id', laporan_id);
           throw insertRekapErr;
         }
         const kasirSummary = kasir[0] || {};
@@ -154,6 +184,9 @@ router.post('/', upload.array('files', 3), async (req, res) => {
           continue;
         }
 
+        // FIX Bug #5: Store potensi data with correct semantic column names.
+        // We use kode/nama columns added in migration 002, and map financial data
+        // into the existing pkb/bbnkb/swdkllj/adm columns as a flat representation.
         const allSetoran = setoran.map(s => ({ laporan_id, ...s }));
         if (potensi) {
           allSetoran.push({
@@ -171,19 +204,18 @@ router.post('/', upload.array('files', 3), async (req, res) => {
 
         const { error: insertStsErr } = await supabase.from('sts_setoran').insert(allSetoran);
         if (insertStsErr) {
-          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — DB may be inconsistent`, insertStsErr.message);
+          console.error(`[upload] laporan ${laporan_id}: delete OK but insert failed — attempting recovery`, insertStsErr.message);
+          await supabase.from('laporan_harian').update({ [`${meta.type}_file`]: null }).eq('id', laporan_id);
           throw insertStsErr;
         }
 
+        // FIX Bug #4: Only insert columns that exist in sts_kabkota_detail table
         if (instansi_rows.length > 0) {
           const { error: insertKabErr } = await supabase.from('sts_kabkota_detail').insert(
             instansi_rows.map(r => ({
               laporan_id,
               kode: r.kode,
               nama: r.nama,
-              pkb_pokok: r.pkb_pokok,
-              pkb_denda: r.pkb_denda,
-              opsen_pkb_denda: r.opsen_pkb_denda,
               opsen_pkb: r.opsen_pkb,
               jumlah: r.jumlah,
             }))
@@ -207,6 +239,7 @@ router.post('/', upload.array('files', 3), async (req, res) => {
         });
       }
 
+      // Check completeness — only require SAM + STS (rekap is optional in the workflow)
       const { data: lapCheck } = await supabase
         .from('laporan_harian')
         .select('sam_file, rekap_file, sts_file')

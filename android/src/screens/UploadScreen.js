@@ -1,17 +1,22 @@
-// src/screens/UploadScreen.js
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator,
-  TextInput, ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadFiles } from '../api';
 import { parseFilename } from '../utils/filename';
+import { colors, radius, shadows, spacing, typography } from '../theme';
 
 const TYPE_META = {
-  sam:   { label: 'SAM',   color: '#1565C0', bg: '#E3F2FD' },
-  sts:   { label: 'STS',   color: '#E65100', bg: '#FBE9E7' },
+  sam: { label: 'SAM', color: colors.accent, bg: colors.accentSoft },
+  sts: { label: 'STS', color: colors.warning, bg: colors.warningSoft },
 };
 
 function buildFileEntry(asset) {
@@ -21,18 +26,67 @@ function buildFileEntry(asset) {
       uri: asset.uri,
       name: asset.name,
       valid: false,
-      error: 'Nama file tidak dikenali. Pastikan format: SAM_III-2_... atau STS_...',
-      typeMeta: { label: 'PDF', color: '#616E7C', bg: '#ECEFF1' },
+      error: 'Nama file tidak dikenali. Gunakan format SAM_III-2_... atau STS_...',
+      typeMeta: { label: 'PDF', color: colors.textMuted, bg: colors.surfaceMuted },
     };
   }
+
   return {
     uri: asset.uri,
     name: asset.name,
     valid: true,
     error: null,
-    typeMeta: TYPE_META[parsed.type] || { label: 'PDF', color: '#616E7C', bg: '#ECEFF1' },
+    typeMeta: TYPE_META[parsed.type] || { label: 'PDF', color: colors.textMuted, bg: colors.surfaceMuted },
     meta: parsed,
   };
+}
+
+function FileCard({ item, onRemove, disabled }) {
+  const statusText = item.valid ? 'Siap diproses' : 'Perlu diganti';
+  const metaText = item.valid
+    ? `${item.meta?.kode || '-'} • ${item.meta?.tanggal || '-'} • ${item.typeMeta.label}`
+    : item.error;
+
+  return (
+    <View style={[styles.fileCard, !item.valid && styles.fileCardInvalid]}>
+      <View style={styles.fileCardTopRow}>
+        <View style={[styles.fileTypeBadge, { backgroundColor: item.typeMeta.bg }]}> 
+          <Text style={[styles.fileTypeBadgeText, { color: item.typeMeta.color }]}>{item.typeMeta.label}</Text>
+        </View>
+        <Text style={[styles.fileStatusText, { color: item.valid ? colors.success : colors.danger }]}>
+          {statusText}
+        </Text>
+      </View>
+
+      <Text style={styles.fileName}>{item.name}</Text>
+      <Text style={[styles.fileMeta, !item.valid && { color: colors.danger }]}>{metaText}</Text>
+
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => onRemove(item.name)}
+        disabled={disabled}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.removeButtonText}>Hapus file</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ManualInput({ label, value, onChangeText, placeholder }) {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={styles.textInput}
+        keyboardType="numeric"
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSoft}
+        value={value}
+        onChangeText={onChangeText}
+      />
+    </View>
+  );
 }
 
 export default function UploadScreen({ navigation }) {
@@ -59,8 +113,8 @@ export default function UploadScreen({ navigation }) {
         const newFiles = picked.filter(f => !existingNames.has(f.name));
         return [...prev, ...newFiles].slice(0, 2);
       });
-    } catch {
-      Alert.alert('Error', 'Gagal membuka file picker');
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Gagal membuka file picker');
     }
   }
 
@@ -68,57 +122,56 @@ export default function UploadScreen({ navigation }) {
     setFiles(prev => prev.filter(f => f.name !== name));
   }
 
-  const validFiles = files.filter(f => f.valid);
-  const hasInvalid = files.some(f => !f.valid);
-
   async function submit() {
-    if (validFiles.length === 0) return;
+    const currentValidFiles = files.filter(f => f.valid);
+    if (currentValidFiles.length === 0) return;
 
-    // Client-side validation: pastikan semua file berasal dari outlet dan tanggal yang sama
     let commonKode = null;
     let commonTanggal = null;
     let firstFileName = '';
 
-    for (const file of validFiles) {
+    for (const file of currentValidFiles) {
       const meta = file.meta;
-      if (meta) {
-        if (commonKode === null) {
-          commonKode = meta.kode;
-          commonTanggal = meta.tanggal;
-          firstFileName = file.name;
-        } else {
-          if (meta.kode !== commonKode) {
-            Alert.alert(
-              'Gagal',
-              `File PDF berasal dari outlet yang berbeda!\n\n` +
-              `• '${firstFileName}' -> Kode: ${commonKode}\n` +
-              `• '${file.name}' -> Kode: ${meta.kode}\n\n` +
-              `Pastikan semua file yang dipilih berasal dari outlet yang sama.`
-            );
-            return;
-          }
-          if (meta.tanggal !== commonTanggal) {
-            Alert.alert(
-              'Gagal',
-              `File PDF memiliki tanggal laporan yang berbeda!\n\n` +
-              `• '${firstFileName}' -> Tanggal: ${commonTanggal}\n` +
-              `• '${file.name}' -> Tanggal: ${meta.tanggal}\n\n` +
-              `Pastikan semua file yang dipilih memiliki tanggal yang sama.`
-            );
-            return;
-          }
-        }
+      if (!meta) continue;
+
+      if (commonKode === null) {
+        commonKode = meta.kode;
+        commonTanggal = meta.tanggal;
+        firstFileName = file.name;
+        continue;
+      }
+
+      if (meta.kode !== commonKode) {
+        Alert.alert(
+          'Outlet tidak sama',
+          `File PDF berasal dari outlet yang berbeda.\n\n• ${firstFileName} → ${commonKode}\n• ${file.name} → ${meta.kode}\n\nPastikan semua file berasal dari outlet yang sama.`
+        );
+        return;
+      }
+
+      if (meta.tanggal !== commonTanggal) {
+        Alert.alert(
+          'Tanggal tidak sama',
+          `File PDF memiliki tanggal laporan berbeda.\n\n• ${firstFileName} → ${commonTanggal}\n• ${file.name} → ${meta.tanggal}\n\nPastikan semua file memiliki tanggal yang sama.`
+        );
+        return;
       }
     }
 
     setLoading(true);
     try {
-      const data = await uploadFiles(validFiles);
+      const data = await uploadFiles(currentValidFiles);
       if (data.errors?.length > 0 && data.results?.length === 0) {
-        Alert.alert('Gagal', data.errors.map(e => e.error).join('\n'));
+        Alert.alert('Upload gagal', data.errors.map(e => e.error).join('\n'));
         return;
       }
+
       const laporan_id = data.results?.[0]?.laporan_id;
+      if (!laporan_id) {
+        Alert.alert('Error', 'Gagal mendapatkan ID laporan dari server');
+        return;
+      }
+
       navigation.navigate('Ringkasan', {
         laporan_id,
         errors: data.errors,
@@ -127,7 +180,7 @@ export default function UploadScreen({ navigation }) {
           potensiR4: potensiR4 || '0',
           esamsatJumlah: esamsatJumlah || '0',
           esamsatPotensi: esamsatPotensi || '0',
-        }
+        },
       });
     } catch (err) {
       const errMsg = err.response?.data?.error || err.message || 'Gagal menghubungi server';
@@ -137,209 +190,382 @@ export default function UploadScreen({ navigation }) {
     }
   }
 
+  const validFiles = files.filter(f => f.valid);
+  const hasInvalid = files.some(f => !f.valid);
   const submitDisabled = loading || validFiles.length === 0;
 
+  const uploadSummary = useMemo(() => {
+    if (validFiles.length === 0) {
+      return {
+        title: 'Belum ada file siap kirim',
+        subtitle: 'Pilih maksimal 2 PDF: SAM III-2 dan STS.',
+      };
+    }
+
+    const first = validFiles[0];
+    return {
+      title: `${validFiles.length} file siap diproses`,
+      subtitle: first?.meta
+        ? `Outlet ${first.meta.kode} • Tanggal ${first.meta.tanggal}`
+        : 'File valid siap diproses',
+    };
+  }, [validFiles]);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-      {/* Area pilih file */}
-      <TouchableOpacity style={styles.pickArea} onPress={pickFiles} disabled={loading}>
-        <Text style={styles.pickIcon}>📄</Text>
-        <Text style={styles.pickText}>Pilih File PDF</Text>
-        <Text style={styles.pickHint}>SAM III-2 · STS  (maks. 2 file)</Text>
-      </TouchableOpacity>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <View style={styles.heroCard}>
+        <Text style={styles.overline}>Langkah 1 · Upload PDF</Text>
+        <Text style={styles.heroTitle}>Unggah file SAM dan STS untuk mulai membuat laporan</Text>
+        <Text style={styles.heroSubtitle}>
+          Pilih file PDF, cek outlet dan tanggal, lalu proses laporan untuk lanjut ke hasil.
+        </Text>
+      </View>
 
-      {/* Peringatan jika ada file invalid */}
-      {hasInvalid && (
-        <View style={styles.warnBox}>
-          <Text style={styles.warnText}>
-            ⚠️ File dengan nama tidak valid tidak akan dikirim.
-          </Text>
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>1. Pilih File PDF</Text>
+          <Text style={styles.sectionCaption}>Maksimal 2 file: SAM III-2 dan STS</Text>
         </View>
-      )}
 
-      {/* Daftar file */}
-      {files.length > 0 ? (
-        <View style={{ marginBottom: 16 }}>
-          {files.map(item => (
-            <View key={item.name} style={[styles.fileRow, !item.valid && styles.fileRowInvalid]}>
-              {/* Badge tipe */}
-              <View style={[styles.typeBadge, { backgroundColor: item.typeMeta.bg }]}>
-                <Text style={[styles.typeBadgeText, { color: item.typeMeta.color }]}>
-                  {item.typeMeta.label}
-                </Text>
-              </View>
+        <TouchableOpacity style={styles.pickArea} onPress={pickFiles} disabled={loading} activeOpacity={0.9}>
+          <Text style={styles.pickTitle}>Pilih File PDF</Text>
+          <Text style={styles.pickHint}>SAM III-2 • STS • maksimal 2 file</Text>
+        </TouchableOpacity>
 
-              {/* Info file */}
-              <View style={styles.fileInfo}>
-                <Text style={styles.fileName} numberOfLines={1}>{item.name}</Text>
-                {!item.valid && (
-                  <Text style={styles.fileError} numberOfLines={2}>{item.error}</Text>
-                )}
-              </View>
+        <View style={styles.summaryBar}>
+          <Text style={styles.summaryTitle}>{uploadSummary.title}</Text>
+          <Text style={styles.summarySubtitle}>{uploadSummary.subtitle}</Text>
+        </View>
 
-              {/* Tombol hapus */}
-              <TouchableOpacity onPress={() => removeFile(item.name)} disabled={loading}>
-                <Text style={styles.removeBtn}>✕</Text>
-              </TouchableOpacity>
+        {hasInvalid && (
+          <View style={styles.warningBox}>
+            <Text style={styles.warningTitle}>Ada file yang belum valid</Text>
+            <Text style={styles.warningText}>
+              File dengan format nama tidak sesuai tidak akan dikirim ke server.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.fileList}>
+          {files.length > 0 ? (
+            files.map(item => (
+              <FileCard key={item.name} item={item} onRemove={removeFile} disabled={loading} />
+            ))
+          ) : (
+            <View style={styles.emptyStateBox}>
+              <Text style={styles.emptyStateTitle}>Belum ada file dipilih</Text>
+              <Text style={styles.emptyStateText}>Mulai dengan memilih PDF SAM atau STS di atas.</Text>
             </View>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.emptyText}>Belum ada file dipilih</Text>
-      )}
-
-      {/* Form Isian Manual Tambahan */}
-      <View style={styles.formCard}>
-        <Text style={styles.formTitle}>Isian Manual Tambahan</Text>
-        
-        <Text style={styles.formSectionLabel}>Potensi Sukaraja</Text>
-        <View style={styles.inputRow}>
-          <View style={styles.inputCol}>
-            <Text style={styles.inputLabel}>WP R.2</Text>
-            <TextInput
-              style={styles.textInput}
-              keyboardType="numeric"
-              placeholder="0"
-              value={potensiR2}
-              onChangeText={setPotensiR2}
-            />
-          </View>
-          <View style={styles.inputCol}>
-            <Text style={styles.inputLabel}>WP R.4</Text>
-            <TextInput
-              style={styles.textInput}
-              keyboardType="numeric"
-              placeholder="0"
-              value={potensiR4}
-              onChangeText={setPotensiR4}
-            />
-          </View>
-        </View>
-
-        <Text style={[styles.formSectionLabel, { marginTop: 16 }]}>E-Samsat</Text>
-        <View style={styles.inputRow}>
-          <View style={styles.inputCol}>
-            <Text style={styles.inputLabel}>Jumlah WP</Text>
-            <TextInput
-              style={styles.textInput}
-              keyboardType="numeric"
-              placeholder="0"
-              value={esamsatJumlah}
-              onChangeText={setEsamsatJumlah}
-            />
-          </View>
-          <View style={styles.inputCol}>
-            <Text style={styles.inputLabel}>Potensi Sukaraja WP</Text>
-            <TextInput
-              style={styles.textInput}
-              keyboardType="numeric"
-              placeholder="0"
-              value={esamsatPotensi}
-              onChangeText={setEsamsatPotensi}
-            />
-          </View>
+          )}
         </View>
       </View>
 
-      {/* Tombol kirim */}
-      <TouchableOpacity
-        style={[styles.submitBtn, submitDisabled && styles.submitBtnDisabled]}
-        onPress={submit}
-        disabled={submitDisabled}
-      >
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.submitText}>
-              Kirim ke Server {validFiles.length > 0 ? `(${validFiles.length} file)` : ''}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>2. Isian Manual Tambahan</Text>
+          <Text style={styles.sectionCaption}>Isi bila ada data tambahan yang perlu ikut masuk laporan</Text>
+        </View>
+
+        <Text style={styles.formSectionTitle}>Potensi Sukaraja</Text>
+        <View style={styles.inputRow}>
+          <ManualInput label="WP R.2" value={potensiR2} onChangeText={setPotensiR2} placeholder="0" />
+          <ManualInput label="WP R.4" value={potensiR4} onChangeText={setPotensiR4} placeholder="0" />
+        </View>
+
+        <Text style={[styles.formSectionTitle, { marginTop: spacing.lg }]}>E-Samsat</Text>
+        <View style={styles.inputRow}>
+          <ManualInput
+            label="Jumlah WP"
+            value={esamsatJumlah}
+            onChangeText={setEsamsatJumlah}
+            placeholder="0"
+          />
+          <ManualInput
+            label="Potensi Sukaraja WP"
+            value={esamsatPotensi}
+            onChangeText={setEsamsatPotensi}
+            placeholder="0"
+          />
+        </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>3. Proses Laporan</Text>
+          <Text style={styles.sectionCaption}>Pastikan file valid sebelum lanjut ke cek hasil</Text>
+        </View>
+
+        <View style={styles.checklistBox}>
+          <Text style={styles.checklistItem}>• File valid: {validFiles.length} dari {files.length}</Text>
+          <Text style={styles.checklistItem}>• Format file harus dikenali sistem</Text>
+          <Text style={styles.checklistItem}>• Outlet dan tanggal harus sama untuk semua file</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.submitBtn, submitDisabled && styles.submitBtnDisabled]}
+          onPress={submit}
+          disabled={submitDisabled}
+          activeOpacity={0.9}
+        >
+          {loading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={styles.submitText}>Memproses laporan...</Text>
+            </View>
+          ) : (
+            <Text style={styles.submitText}>
+              Proses Laporan {validFiles.length > 0 ? `(${validFiles.length} file)` : ''}
             </Text>
-        }
-      </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#F4F6F9' },
-
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  contentContainer: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  heroCard: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    ...shadows.card,
+  },
+  overline: {
+    ...typography.overline,
+    color: '#BFDBFE',
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+  },
+  heroTitle: {
+    color: colors.white,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#CBD5E1',
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
+    ...shadows.card,
+  },
+  sectionHeader: {
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    ...typography.title,
+    color: colors.text,
+    fontSize: 17,
+    marginBottom: 4,
+  },
+  sectionCaption: {
+    ...typography.bodySm,
+    color: colors.textSoft,
+  },
   pickArea: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5, borderColor: '#BBDEFB',
-    borderRadius: 16, padding: 32, alignItems: 'center', marginBottom: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+    minHeight: 120,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
-  pickIcon: { fontSize: 48, marginBottom: 8 },
-  pickText: { fontSize: 16, fontWeight: '600', color: '#1565C0' },
-  pickHint: { fontSize: 12, color: '#616E7C', marginTop: 4, textAlign: 'center' },
-
-  warnBox: {
-    backgroundColor: '#FFF3E0', borderRadius: 10,
-    padding: 10, marginBottom: 10,
-    borderLeftWidth: 3, borderLeftColor: '#E65100',
+  pickTitle: {
+    ...typography.title,
+    color: colors.accent,
+    marginBottom: 4,
   },
-  warnText: { fontSize: 12, color: '#E65100' },
-
-  fileList: { flex: 1, marginBottom: 16 },
-  fileRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12, padding: 12, marginBottom: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  pickHint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
-  fileRowInvalid: {
-    borderWidth: 1.5, borderColor: '#FFCDD2',
-    backgroundColor: '#FFF5F5',
+  summaryBar: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  typeBadge: {
-    paddingHorizontal: 9, paddingVertical: 3,
-    borderRadius: 10, marginRight: 10, alignSelf: 'flex-start', marginTop: 2,
+  summaryTitle: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '700',
+    marginBottom: 2,
   },
-  typeBadgeText: { fontSize: 10, fontWeight: '700' },
-  fileInfo: { flex: 1 },
-  fileName: { fontSize: 13, color: '#1A1A2E', fontWeight: '500' },
-  fileError: { fontSize: 11, color: '#C62828', marginTop: 3, lineHeight: 15 },
-  removeBtn: { fontSize: 16, color: '#B71C1C', paddingHorizontal: 8 },
-
-  emptyText: { flex: 1, textAlign: 'center', color: '#aaa', marginTop: 40, fontSize: 14 },
-
-  submitBtn: {
-    backgroundColor: '#1565C0', height: 52, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 4, elevation: 2,
-    marginTop: 16,
+  summarySubtitle: {
+    ...typography.bodySm,
+    color: colors.textSoft,
   },
-  submitBtnDisabled: { backgroundColor: '#90CAF9', elevation: 0 },
-  submitText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-
-  formCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16,
-    padding: 16, marginBottom: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
+  warningBox: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  formTitle: {
-    fontSize: 14, fontWeight: '700', color: '#1565C0',
-    marginBottom: 16, textTransform: 'uppercase', letterSpacing: 0.5,
+  warningTitle: {
+    ...typography.body,
+    color: colors.warning,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  formSectionLabel: {
-    fontSize: 12, fontWeight: '600', color: '#616E7C',
-    marginBottom: 8,
+  warningText: {
+    ...typography.bodySm,
+    color: colors.warning,
+  },
+  fileList: {
+    gap: spacing.sm,
+  },
+  fileCard: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+  },
+  fileCardInvalid: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  fileCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  fileTypeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  fileTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  fileStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fileName: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  fileMeta: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+  },
+  removeButton: {
+    minHeight: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeButtonText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyStateBox: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyStateTitle: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptyStateText: {
+    ...typography.bodySm,
+    color: colors.textSoft,
+    textAlign: 'center',
+  },
+  formSectionTitle: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
   },
   inputRow: {
-    flexDirection: 'row', gap: 12,
+    flexDirection: 'row',
+    gap: spacing.md,
   },
-  inputCol: {
+  inputGroup: {
     flex: 1,
   },
   inputLabel: {
-    fontSize: 11, color: '#616E7C', marginBottom: 4,
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginBottom: 6,
   },
   textInput: {
-    backgroundColor: '#F4F6F9', height: 44, borderRadius: 8,
-    paddingHorizontal: 12, fontSize: 14, color: '#1A1A2E',
-    borderWidth: 1, borderColor: '#E2E8F0',
+    height: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    color: colors.text,
+    fontSize: 15,
+  },
+  checklistBox: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: 6,
+  },
+  checklistItem: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  submitBtn: {
+    minHeight: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  submitBtnDisabled: {
+    backgroundColor: '#93C5FD',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  submitText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
-

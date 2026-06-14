@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * Parser for STS (Surat Tanda Setoran) PDF text.
@@ -19,50 +19,74 @@ function extractSection(text, startMarker, endMarker) {
   const startIdx = text.indexOf(startMarker);
   if (startIdx === -1) return null;
   const contentStart = startIdx + startMarker.length;
-  const endIdx = endMarker ? text.indexOf(endMarker, contentStart) : text.length;
-  return text.substring(contentStart, endIdx === -1 ? undefined : endIdx);
+  if (endMarker) {
+    const endIdx = text.indexOf(endMarker, contentStart);
+    // FIX Bug #10: If endMarker not found, return null instead of bleeding into all content
+    if (endIdx === -1) return null;
+    return text.substring(contentStart, endIdx);
+  }
+  return text.substring(contentStart);
+}
+
+function findLineIndex(lines, matcher, start = 0) {
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (typeof matcher === 'string') {
+      if (line === matcher) return i;
+    } else if (matcher.test(line)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function extractLastAmount(line) {
+  const nums = extractNumbers(line);
+  return nums.length > 0 ? nums[nums.length - 1] : 0;
 }
 
 function parseSts(text) {
   const lines = text.split('\n').map(l => l.trim());
   // Join all lines for summary section parsing (existing approach)
-  const joined = lines.join('');
+  // FIX: join with a single space separator to prevent cross-line number merging
+  const joined = lines.join(' ');
 
   const setoran = [];
 
-  // ── Provinsi Jawa Barat ──────────────────────────────────────────────────
-  const provSection = extractSection(joined, 'PemerintahProvinsiJawaBarat', 'PT.JasaRaharja');
-  if (provSection) {
-    const nums = extractNumbers(provSection);
-    const total = nums[nums.length - 1] || 0;
+  // Read totals from the original line layout instead of the joined text.
+  // The joined string can bleed values across sections and double-count totals.
+  const provIdx = findLineIndex(lines, 'PemerintahProvinsiJawaBarat');
+  const jrIdx = findLineIndex(lines, 'PT.JasaRaharja');
+  const poldaIdx = findLineIndex(lines, 'Polda');
+  const kabIdx = findLineIndex(lines, 'Kabupaten/Kota');
+  const grandIdx = findLineIndex(lines, /^GrandTotal/);
+
+  if (provIdx !== -1 && jrIdx !== -1) {
+    const provTotalLine = lines.slice(provIdx, jrIdx).find(line => line.startsWith('TOTAL'));
+    const total = extractLastAmount(provTotalLine || '');
     setoran.push({ instansi: 'provinsi', pkb: total, bbnkb: 0, swdkllj: 0, adm: 0, total });
   }
 
-  // ── Jasa Raharja ─────────────────────────────────────────────────────────
-  const jrSection = extractSection(joined, 'PT.JasaRaharja', 'Polda');
-  if (jrSection) {
-    const nums = extractNumbers(jrSection);
-    const swdkllj = nums[0] || 0;
-    const total = nums[2] || nums[1] || 0;
+  if (jrIdx !== -1 && poldaIdx !== -1) {
+    const jrLines = lines.slice(jrIdx, poldaIdx);
+    const jrBodyLine = jrLines.find(line => /^JASARAHARJA/.test(line));
+    const jrTotalLine = jrLines.find(line => line.startsWith('TOTAL'));
+    const bodyNums = extractNumbers(jrBodyLine || '');
+    const swdkllj = bodyNums[0] || 0;
+    const total = extractLastAmount(jrTotalLine || jrBodyLine || '');
     setoran.push({ instansi: 'jasa_raharja', pkb: 0, bbnkb: 0, swdkllj, adm: 0, total });
   }
 
-  // ── Polda ─────────────────────────────────────────────────────────────────
-  const poldaSection = extractSection(joined, 'Polda', 'Kabupaten/Kota');
-  if (poldaSection) {
-    const nums = extractNumbers(poldaSection);
-    const stnk = nums[0] || 0;
-    const tnkb = nums[1] || 0;
-    const total = nums[2] || (stnk + tnkb);
-    const adm = stnk + tnkb;
-    setoran.push({ instansi: 'polda', pkb: 0, bbnkb: 0, swdkllj: 0, adm, total });
+  if (poldaIdx !== -1 && kabIdx !== -1) {
+    const poldaTotalLine = lines.slice(poldaIdx, kabIdx).find(line => line.startsWith('TOTAL'));
+    const total = extractLastAmount(poldaTotalLine || '');
+    setoran.push({ instansi: 'polda', pkb: 0, bbnkb: 0, swdkllj: 0, adm: total, total });
   }
 
-  // ── Kabupaten/Kota ────────────────────────────────────────────────────────
-  const kabSection = extractSection(joined, 'Kabupaten/Kota', 'GrandTotal');
-  if (kabSection) {
-    const nums = extractNumbers(kabSection);
-    const total = nums[nums.length - 1] || 0;
+  if (kabIdx !== -1) {
+    const kabEnd = grandIdx !== -1 ? grandIdx : lines.length;
+    const kabTotalLine = lines.slice(kabIdx, kabEnd).find(line => line.startsWith('TOTAL'));
+    const total = extractLastAmount(kabTotalLine || '');
     setoran.push({ instansi: 'kab_kota', pkb: total, bbnkb: 0, swdkllj: 0, adm: 0, total });
   }
 

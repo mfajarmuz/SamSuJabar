@@ -37,15 +37,14 @@ describe('POST /api/upload', () => {
         contentType: 'application/pdf',
       });
     expect(res.status).toBe(400);
-    expect(res.body.errors).toBeDefined();
-    expect(res.body.errors[0].error).toMatch(/format nama file/i);
+    // FIX Bug #13 (test): Route returns { error: "..." } (singular), not { errors: [...] }
+    expect(res.body.error).toBeDefined();
+    expect(res.body.error).toMatch(/format nama file/i);
   });
 
-  test('returns 200 with parsed summary for valid SAM PDF', async () => {
-    if (!fs.existsSync(SAM_PDF_PATH)) {
-      console.warn('SAM PDF not found, skipping');
-      return;
-    }
+  // FIX Bug #14 (test): Use proper conditional skip instead of silent return
+  const hasPdf = fs.existsSync(SAM_PDF_PATH);
+  (hasPdf ? test : test.skip)('returns 200 with parsed summary for valid SAM PDF', async () => {
     const res = await request(app)
       .post('/api/upload')
       .attach('files', fs.readFileSync(SAM_PDF_PATH), {

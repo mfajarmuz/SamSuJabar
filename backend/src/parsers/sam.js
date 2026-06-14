@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 const { isKabupatenTasikmalaya } = require('../config/kecamatan');
 
@@ -133,9 +133,22 @@ function parseSam(text) {
 
   for (let a = 0; a < anchors.length; a++) {
     const startIdx = anchors[a].idx;                                  // SKKP line
-    const endIdx = a + 1 < anchors.length
-      ? anchors[a + 1].idx - 2   // exclude the row-number line preceding next SKKP
-      : raw.length - 1;
+    // FIX: Find the actual row-number line preceding the next SKKP for accurate slicing
+    let endIdx;
+    if (a + 1 < anchors.length) {
+      const nextSkkpIdx = anchors[a + 1].idx;
+      // Look for the row number line (1-3 lines before the next SKKP)
+      let rowNumIdx = nextSkkpIdx;
+      for (let back = 1; back <= 3; back++) {
+        if (nextSkkpIdx - back >= 0 && ROW_NUM_RE.test(raw[nextSkkpIdx - back])) {
+          rowNumIdx = nextSkkpIdx - back;
+          break;
+        }
+      }
+      endIdx = rowNumIdx - 1;
+    } else {
+      endIdx = raw.length - 1;
+    }
 
     const block = raw.slice(startIdx, endIdx + 1);
 
@@ -203,8 +216,8 @@ function parseSam(text) {
       const alamat = addressLines.join(' ');
       const is_kabupaten = isKabupatenTasikmalaya(alamat);
 
-      // adm = total minus PKB jumlah and OPSEN PKB jumlah (BEA STNK/TNKB)
-      adm = total - pkb_jumlah - opsen_pkb_jumlah;
+      // FIX Bug #9: Clamp adm to 0 — prevent negative values from parsing errors
+      adm = Math.max(0, total - pkb_jumlah - opsen_pkb_jumlah);
 
       transaksi.push({ no_skkp, jenis_kendaraan, no_polisi, pkb, swdkllj, adm, total, alamat, is_kabupaten });
     } else {

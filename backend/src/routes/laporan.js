@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
+const { asyncHandler } = require('../utils/asyncHandler');
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   if (req.query.tanggal && !/^\d{4}-\d{2}-\d{2}$/.test(req.query.tanggal)) {
     return res.status(400).json({ error: 'Format tanggal harus YYYY-MM-DD' });
   }
@@ -18,9 +19,9 @@ router.get('/', async (req, res) => {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const id = req.params.id;
 
   // Guard: DB uses integer PKs
@@ -37,6 +38,18 @@ router.get('/:id', async (req, res) => {
   ]);
 
   if (laporanRes.error) return res.status(404).json({ error: 'Laporan tidak ditemukan' });
+
+  // Check for errors in sub-queries (don't silently ignore)
+  const subErrors = [
+    transaksiRes.error && `transaksi: ${transaksiRes.error.message}`,
+    rekapRes.error && `rekap: ${rekapRes.error.message}`,
+    stsRes.error && `sts: ${stsRes.error.message}`,
+    kabkotaRes.error && `kabkota: ${kabkotaRes.error.message}`,
+  ].filter(Boolean);
+
+  if (subErrors.length > 0) {
+    console.warn('[laporan/:id] sub-query errors:', subErrors.join('; '));
+  }
 
   const jenisSummary = {};
   const potensiSummary = {};
@@ -75,7 +88,8 @@ router.get('/:id', async (req, res) => {
     sts,
     potensi,
     kabkota: kabkotaRes.data || [],
+    ...(subErrors.length > 0 ? { warnings: subErrors } : {}),
   });
-});
+}));
 
 module.exports = router;
