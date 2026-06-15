@@ -21,7 +21,11 @@ router.post('/', upload.array('files', 3), async (req, res) => {
   for (const file of req.files) {
     const meta = parseFilename(file.originalname);
     if (!meta) {
-      return res.status(400).json({ error: `Format nama file tidak valid: ${file.originalname}` });
+      const errMsg = `Format nama file tidak valid: ${file.originalname}`;
+      return res.status(400).json({
+        error: errMsg,
+        errors: [{ file: file.originalname, error: errMsg }]
+      });
     }
 
     if (commonKode === null) {
@@ -30,19 +34,23 @@ router.post('/', upload.array('files', 3), async (req, res) => {
       firstFileName = file.originalname;
     } else {
       if (meta.kode !== commonKode) {
+        const errMsg = `Gagal: File PDF berasal dari outlet yang berbeda!\n\n` +
+                       `• File '${firstFileName}' -> Kode: ${commonKode}\n` +
+                       `• File '${file.originalname}' -> Kode: ${meta.kode}\n\n` +
+                       `Pastikan semua file yang dipilih berasal dari outlet yang sama.`;
         return res.status(400).json({
-          error: `Gagal: File PDF berasal dari outlet yang berbeda!\n\n` +
-                 `• File '${firstFileName}' -> Kode: ${commonKode}\n` +
-                 `• File '${file.originalname}' -> Kode: ${meta.kode}\n\n` +
-                 `Pastikan semua file yang dipilih berasal dari outlet yang sama.`
+          error: errMsg,
+          errors: [{ file: file.originalname, error: errMsg }]
         });
       }
       if (meta.tanggal !== commonTanggal) {
+        const errMsg = `Gagal: File PDF memiliki tanggal laporan yang berbeda!\n\n` +
+                       `• File '${firstFileName}' -> Tanggal: ${commonTanggal}\n` +
+                       `• File '${file.originalname}' -> Tanggal: ${meta.tanggal}\n\n` +
+                       `Pastikan semua file yang dipilih memiliki tanggal yang sama.`;
         return res.status(400).json({
-          error: `Gagal: File PDF memiliki tanggal laporan yang berbeda!\n\n` +
-                 `• File '${firstFileName}' -> Tanggal: ${commonTanggal}\n` +
-                 `• File '${file.originalname}' -> Tanggal: ${meta.tanggal}\n\n` +
-                 `Pastikan semua file yang dipilih memiliki tanggal yang sama.`
+          error: errMsg,
+          errors: [{ file: file.originalname, error: errMsg }]
         });
       }
     }

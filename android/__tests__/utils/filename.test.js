@@ -1,4 +1,4 @@
-import { parseFilename } from '../../utils/filename';
+import { parseFilename } from '../../src/utils/filename';
 
 describe('parseFilename', () => {
   test('parses SAM III-2 filename', () => {
