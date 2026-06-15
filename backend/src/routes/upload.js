@@ -224,6 +224,9 @@ router.post('/', upload.array('files', 3), async (req, res) => {
               laporan_id,
               kode: r.kode,
               nama: r.nama,
+              pkb_pokok: r.pkb_pokok,
+              pkb_denda: r.pkb_denda,
+              opsen_pkb_denda: r.opsen_pkb_denda,
               opsen_pkb: r.opsen_pkb,
               jumlah: r.jumlah,
             }))
