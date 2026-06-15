@@ -183,7 +183,14 @@ export default function UploadScreen({ navigation }) {
         },
       });
     } catch (err) {
-      const errMsg = err.response?.data?.error || err.message || 'Gagal menghubungi server';
+      let errMsg = err.message || 'Gagal menghubungi server';
+      if (err.response?.data) {
+        if (err.response.data.error) {
+          errMsg = err.response.data.error;
+        } else if (err.response.data.errors && err.response.data.errors.length > 0) {
+          errMsg = err.response.data.errors.map(e => `${e.file || 'Error'}: ${e.error}`).join('\n');
+        }
+      }
       Alert.alert('Error', errMsg);
     } finally {
       setLoading(false);

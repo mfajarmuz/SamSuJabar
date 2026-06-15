@@ -20,8 +20,6 @@
       },
       "package": "com.samsat.kiss"
     },
-    "plugins": [
-      "expo-status-bar"
-    ]
+    "plugins": []
   }
 }

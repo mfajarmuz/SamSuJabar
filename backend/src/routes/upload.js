@@ -272,6 +272,9 @@ router.post('/', upload.array('files', 3), async (req, res) => {
   }
 
   const statusCode = results.length > 0 ? 200 : 400;
+  if (errors.length > 0) {
+    console.error('[upload] errors occurred:', errors);
+  }
   res.status(statusCode).json({ results, errors });
 });
 
