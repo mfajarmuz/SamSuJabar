@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS outlets (
 INSERT INTO outlets (kode, nama) VALUES
     ('12801-0001', 'Outlet Salebu'),
     ('12801-0002', 'Outlet Ciawi'),
-    ('12801-0003', 'Outlet Karangnunggal'),
+    ('12801-0003', 'SAMKEL 1-SUKARAJA'),
     ('12801-0004', 'Kios Samsat Singaparna'),
     ('12801-0005', 'Samdong 2'),
     ('12801-0006', 'Samades Manonjaya'),
