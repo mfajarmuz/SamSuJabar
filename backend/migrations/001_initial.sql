@@ -16,7 +16,11 @@ INSERT INTO outlets (kode, nama) VALUES
     ('12801-0006', 'Samades Manonjaya'),
     ('12801-0007', 'Samkel 3'),
     ('12801-0008', 'Samkel 2'),
-    ('12808-0001', 'SAMKEL 1-SUKARAJA')
+    ('12808-0001', 'SAMKEL 1-SUKARAJA'),
+    ('12808-0002', 'SAMKEL 2-SUKARAJA'),
+    ('12806-0001', 'Samdong 1'),
+    ('12806-0002', 'Samdong 2 Sukaraja'),
+    ('12808-0003', 'Samkel 3 Sukaraja')
 ON CONFLICT (kode) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS laporan_harian (
